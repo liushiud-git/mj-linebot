@@ -1,6 +1,6 @@
 # liushiud-mj-linebot
 
-一個以 **Java + Spring Boot + LINE Bot SDK** 建立的麻將戰績統計機器人，
+一個以 **Java + Spring Boot + LINE Bot SDK** 建立的戰績統計機器人，
 資料庫採用 **Turso (libSQL / 雲端 SQLite)**。
 
 ## 功能
@@ -94,5 +94,3 @@ LINE_CHANNEL_SECRET=你的LineBot Secret
 - 玩家名稱以空白分隔；分數請填整數（可帶正負號）。
 - 標準差用公式：`sqrt( (sum(score^2)/n) - (avg^2) )`。
 - 若未提供時間，系統會用台北時區的當下時間，並以 ISO8601 回存。
-
-祝你麻將一路自摸、胡到天聽 🀄🎉
