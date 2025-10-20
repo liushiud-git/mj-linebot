@@ -1,0 +1,17 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: ${TURSO_DB_URL}
+    username: ""
+    password: ${TURSO_DB_TOKEN}
+    driver-class-name: org.sqlite.JDBC
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+line.bot:
+  channel-token: ${LINE_CHANNEL_TOKEN}
+  channel-secret: ${LINE_CHANNEL_SECRET}
