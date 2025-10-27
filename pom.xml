@@ -34,11 +34,11 @@
     </dependency>
 
     <!-- LINE Bot SDK -->
-    <dependency>
-      <groupId>com.linecorp.bot</groupId>
-      <artifactId>line-bot-spring-boot</artifactId>
-      <version>4.9.0</version>
-    </dependency>
+<dependency>
+    <groupId>com.linecorp.bot</groupId>
+    <artifactId>line-bot-spring-boot</artifactId>
+    <version>6.0.0</version>
+</dependency>
 
     <!-- LibSQL / Turso JDBC Driver (DBeaver's driver) -->
 <dependency>
