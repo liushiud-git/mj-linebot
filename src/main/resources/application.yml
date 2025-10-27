@@ -3,9 +3,9 @@ server:
 
 spring:
   datasource:
-    url: ${TURSO_DB_URL:libsql://mahjong-liushiud.aws-ap-northeast-1.turso.io}
+    url: libsql://mahjong-liushiud.aws-ap-northeast-1.turso.io
     username: ""
-    password: ${TURSO_DB_TOKEN:eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NjA5NjMwNTcsImlkIjoiZDY2NWQzZTUtODViNi00YjViLTg4MzktMmQzMTFmZTliYWJiIiwicmlkIjoiZmYzNDllMDgtYzcwZC00Mjg2LTkxYWUtYzI1NTQ1NjNjNmFkIn0.NHYTE-yxyLaVe74Zi7EtYBRLJFiXbixg9OvrE7Gtu6WhXEQMbGJICrdeMJLBzJFx_PvEh437OupQoqsMUiDeAQ}
+    password: eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NjA5NjMwNTcsImlkIjoiZDY2NWQzZTUtODViNi00YjViLTg4MzktMmQzMTFmZTliYWJiIiwicmlkIjoiZmYzNDllMDgtYzcwZC00Mjg2LTkxYWUtYzI1NTQ1NjNjNmFkIn0.NHYTE-yxyLaVe74Zi7EtYBRLJFiXbixg9OvrE7Gtu6WhXEQMbGJICrdeMJLBzJFx_PvEh437OupQoqsMUiDeAQ
     driver-class-name: com.dbeaver.jdbc.driver.libsql.LibSqlDriver
     type: org.springframework.jdbc.datasource.SimpleDriverDataSource
   sql:
@@ -14,5 +14,5 @@ spring:
       schema-locations: classpath:schema.sql
 
 line.bot:
-  channel-token: ${LINE_CHANNEL_TOKEN:ltryhCt6Pk0E40zVQ+C8hKPraZQXaJIzYWiFDKynzGRubpcTh31tmLIw0JYgO/p4P4Q3Jovq6DK9YPjySGRLHXn0mn69yY0h7AqwYI/nDswutjBFE+dZCQVYadnzPs5Yojc1aFpA08g0nFJ+imTa2AdB04t89/1O/w1cDnyilFU=}
-  channel-secret: ${LINE_CHANNEL_SECRET:2f743b425967ed382d87b1fd7672cd96}
+  channel-token: ltryhCt6Pk0E40zVQ+C8hKPraZQXaJIzYWiFDKynzGRubpcTh31tmLIw0JYgO/p4P4Q3Jovq6DK9YPjySGRLHXn0mn69yY0h7AqwYI/nDswutjBFE+dZCQVYadnzPs5Yojc1aFpA08g0nFJ+imTa2AdB04t89/1O/w1cDnyilFU=
+  channel-secret: 2f743b425967ed382d87b1fd7672cd96
