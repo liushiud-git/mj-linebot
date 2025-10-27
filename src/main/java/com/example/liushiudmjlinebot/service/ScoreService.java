@@ -71,13 +71,8 @@ public class ScoreService {
     }
 
     public String status() {
-        List<PlayerSummary> list = jdbc.query("""            SELECT player,
-                   SUM(score) AS total,
-                   SUM(score*score) AS sumsq,
-                   COUNT(*) AS n
-            FROM mahjong_records
-            GROUP BY player
-            """, rs -> {
+        List<PlayerSummary> list = jdbc.query("SELECT player,SUM(score) AS total, SUM(score*score) AS sumsq, COUNT(*) AS n FROM mahjong_records GROUP BY player",
+        		rs -> {
             List<PlayerSummary> res = new ArrayList<>();
             while (rs.next()) {
                 String p = rs.getString("player");
@@ -104,10 +99,7 @@ public class ScoreService {
 
     public String show10() {
         // 取最近 10 個回合，顯示每回合各玩家成績
-        List<Map<String, Object>> rounds = jdbc.queryForList("""            SELECT id, datetime FROM mahjong_rounds
-            ORDER BY id DESC
-            LIMIT 10
-        """);
+        List<Map<String, Object>> rounds = jdbc.queryForList("SELECT id, datetime FROM mahjong_rounds ORDER BY id DESC LIMIT 10 ");
 
         if (rounds.isEmpty()) return "目前沒有任何戰績。";
 
@@ -116,10 +108,7 @@ public class ScoreService {
             long roundId = ((Number)r.get("id")).longValue();
             String dt = (String) r.get("datetime");
             sb.append(dt).append("\n  ");
-            List<Map<String, Object>> recs = jdbc.queryForList("""                SELECT player, score FROM mahjong_records
-                WHERE round_id = ?
-                ORDER BY player ASC
-            """, roundId);
+            List<Map<String, Object>> recs = jdbc.queryForList("SELECT player, score FROM mahjong_records WHERE round_id = ? ORDER BY player ASC", roundId);
             String line = recs.stream()
                     .map(m -> m.get("player") + " " + ( (Number)m.get("score")).intValue())
                     .collect(Collectors.joining(", "));
@@ -133,13 +122,7 @@ public class ScoreService {
         // 清空 summary
         jdbc.update("DELETE FROM mahjong_summary");
         // 重新計算
-        jdbc.query("""            SELECT player,
-                   SUM(score) AS total,
-                   SUM(score*score) AS sumsq,
-                   COUNT(*) AS n
-            FROM mahjong_records
-            GROUP BY player
-        """, rs -> {
+        jdbc.query("SELECT player, SUM(score) AS total, SUM(score*score) AS sumsq, COUNT(*) AS n FROM mahjong_records GROUP BY player", rs -> {
             while (rs.next()) {
                 String p = rs.getString("player");
                 int total = rs.getInt("total");
@@ -165,7 +148,7 @@ public class ScoreService {
                 return zdt.format(ISO);
             }
             // 若缺少時區，補上 +08:00
-            if (!raw.contains("+") && !raw.endswith("Z")) {
+            if (!raw.contains("+") && !raw.endsWith("Z")) {
                 // parse as local Taipei
                 String t = raw;
                 if (t.length()==16) t += ":00"; // add seconds if missing
