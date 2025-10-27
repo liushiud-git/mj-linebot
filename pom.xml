@@ -41,11 +41,18 @@
     </dependency>
 
     <!-- LibSQL / Turso JDBC Driver (DBeaver's driver) -->
-    <dependency>
-      <groupId>com.dbeaver.jdbc</groupId>
-      <artifactId>com.dbeaver.jdbc.driver.libsql</artifactId>
-      <version>1.0.4</version>
-    </dependency>
+<dependency>
+  <groupId>com.dbeaver.jdbc</groupId>
+  <artifactId>com.dbeaver.jdbc.driver.libsql</artifactId>
+  <version>1.0.4</version>
+</dependency>
+
+
+<dependency>
+  <groupId>com.google.code.gson</groupId>
+  <artifactId>gson</artifactId>
+  <version>2.11.0</version>
+</dependency>
 
     <!-- SQLite JDBC for local dev (optional fallback) -->
     <dependency>
