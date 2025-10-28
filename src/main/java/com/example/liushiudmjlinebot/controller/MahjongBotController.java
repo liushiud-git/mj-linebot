@@ -7,15 +7,23 @@ import com.linecorp.bot.model.message.TextMessage;
 import com.linecorp.bot.spring.boot.annotation.EventMapping;
 import com.linecorp.bot.spring.boot.annotation.LineMessageHandler;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @LineMessageHandler
 public class MahjongBotController {
+	
+	private static final Logger log = LoggerFactory.getLogger(MahjongBotController.class);
+	
 	@Autowired
 	private ScoreService scoreService;
 
 	@EventMapping
 	public TextMessage handleTextMessage(MessageEvent<TextMessageContent> event) {
 		String text = event.getMessage().getText().trim();
+		
+		log.info("input message = " + text);
+		
 		if (text.startsWith("/add")) {
 			return new TextMessage(scoreService.addByFormattedLine(text.substring(4)));
 		} else if (text.startsWith("/del")) {

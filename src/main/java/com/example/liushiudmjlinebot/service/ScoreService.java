@@ -1,15 +1,20 @@
 package com.example.liushiudmjlinebot.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.util.*;
 import java.util.regex.*;
 
 @Service
 public class ScoreService {
+	
 	private final JdbcTemplate jdbc;
-
+	private static final Logger log = LoggerFactory.getLogger(ScoreService.class);
+	
 	public ScoreService(JdbcTemplate jdbc) {
 		this.jdbc = jdbc;
 	}
@@ -25,8 +30,8 @@ public class ScoreService {
 			String date = m.group("date");
 			String pairs = m.group("pairs");
 			
-			System.out.println("date = " + date);
-			System.out.println("pairs = " + pairs);
+			log.info("date = " + date);
+			log.info("pairs = " + pairs);
 
 			deleteByDate(date);
 			jdbc.update("INSERT INTO mahjong_rounds(date) VALUES (?)", date);
@@ -39,11 +44,11 @@ public class ScoreService {
 				if (kv.length != 2)
 					continue;
 				String p = kv[0];
-				System.out.println("name = " + p);
+				log.info("name = " + p);
 				int s;
 				try {
 					s = Integer.parseInt(kv[1]);
-					System.out.println("value = " + s);
+					log.info("value = " + s);
 				} catch (Exception e) {
 					continue;
 				}
@@ -58,7 +63,7 @@ public class ScoreService {
 			return "✅ 已登錄 " + formatDate(date) + " 戰績\n" + msg.toString().trim();
 			
 		}catch(Exception ex) {
-			System.out.println("exception " + ex.getMessage());
+			log.info("exception " + ex.getMessage());
 			return "哎啊~新增有問題";
 		}
 		
