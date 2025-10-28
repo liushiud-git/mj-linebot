@@ -1,25 +1,27 @@
--- 建立回合表：每次 /add 產生一個回合
-CREATE TABLE IF NOT EXISTS mahjong_rounds (
+DROP TABLE IF EXISTS mahjong_summary;
+DROP TABLE IF EXISTS mahjong_records;
+DROP TABLE IF EXISTS mahjong_rounds;
+
+CREATE TABLE mahjong_rounds (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  datetime TEXT NOT NULL
+  date TEXT UNIQUE NOT NULL
 );
 
--- 每局明細：一個回合對應多位玩家分數
-CREATE TABLE IF NOT EXISTS mahjong_records (
+CREATE TABLE mahjong_records (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   round_id INTEGER NOT NULL,
-  datetime TEXT NOT NULL,
+  date TEXT NOT NULL,
   player TEXT NOT NULL,
   score INTEGER NOT NULL,
   FOREIGN KEY (round_id) REFERENCES mahjong_rounds(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_records_round ON mahjong_records(round_id);
-CREATE INDEX IF NOT EXISTS idx_records_player ON mahjong_records(player);
+CREATE INDEX idx_records_round ON mahjong_records(round_id);
+CREATE INDEX idx_records_player ON mahjong_records(player);
 
--- 玩家總結表
-CREATE TABLE IF NOT EXISTS mahjong_summary (
+CREATE TABLE mahjong_summary (
   player TEXT PRIMARY KEY,
   total_score INTEGER NOT NULL,
-  stddev REAL NOT NULL
+  win_count INTEGER NOT NULL,
+  lose_count INTEGER NOT NULL
 );

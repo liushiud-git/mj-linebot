@@ -1,170 +1,123 @@
 package com.example.liushiudmjlinebot.service;
 
-import com.example.liushiudmjlinebot.model.PlayerSummary;
-import com.example.liushiudmjlinebot.util.StatsCalculator;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
+import java.util.regex.*;
 
 @Service
 public class ScoreService {
-    private final JdbcTemplate jdbc;
-    private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
-    private static final DateTimeFormatter ISO = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
-    private static final Pattern DATE_PREFIX = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}.*");
+	private final JdbcTemplate jdbc;
 
-    public ScoreService(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
-    }
+	public ScoreService(JdbcTemplate jdbc) {
+		this.jdbc = jdbc;
+	}
 
-    @Transactional
-    public String addRound(String input) {
-        // 支援兩種格式：
-        // /add A +2000 B -1500 C -200 D -300
-        // /add 2025-10-19T20:01 A +2000 B -1500 ...
-        String[] tokens = input.trim().split("\\s+");
-        if (tokens.length < 3) return "❌ 格式錯誤，請輸入：/add A +2000 B -1500 ...";
+	private static final Pattern LINE_PATTERN = Pattern.compile("^(?<date>\\d{8})\\s*戰績[:：]\\s*(?<pairs>.+)$");
 
-        int idx = 1;
-        String datetime;
-        if (tokens.length > 3 && DATE_PREFIX.matcher(tokens[1]).matches()) {
-            // 使用者有提供時間
-            datetime = normalizeDatetime(tokens[1]);
-            idx = 2;
-        } else {
-            datetime = ZonedDateTime.now(TAIPEI).format(ISO);
-        }
+	@Transactional
+	public String addByFormattedLine(String text) {
+		Matcher m = LINE_PATTERN.matcher(text.trim());
+		if (!m.matches())
+			return "❌ 格式錯誤，請用：20251017 戰績：隨 -7700,蕭 -2100,馬 5700,堂 3700,鳥 400";
+		String date = m.group("date");
+		String pairs = m.group("pairs");
 
-        if ((tokens.length - idx) % 2 != 0) {
-            return "❌ 格式錯誤，玩家與分數需成對：/add A +2000 B -1500";
-        }
+		deleteByDate(date);
+		jdbc.update("INSERT INTO mahjong_rounds(date) VALUES (?)", date);
+		Long roundId = jdbc.queryForObject("SELECT last_insert_rowid()", Long.class);
 
-        // 建立回合
-        jdbc.update("INSERT INTO mahjong_rounds(datetime) VALUES (?)", datetime);
-        Long roundId = jdbc.queryForObject("SELECT last_insert_rowid()", Long.class);
+		int inserted = 0;
+		StringBuilder msg = new StringBuilder();
+		for (String seg : pairs.split("\s*,\s*")) {
+			String[] kv = seg.trim().split("\s+");
+			if (kv.length != 2)
+				continue;
+			String p = kv[0];
+			int s;
+			try {
+				s = Integer.parseInt(kv[1]);
+			} catch (Exception e) {
+				continue;
+			}
+			jdbc.update("INSERT INTO mahjong_records(round_id,date,player,score) VALUES (?,?,?,?)", roundId, date, p,
+					s);
+			msg.append(String.format("%s %+d (%s)\n", p, s, s > 0 ? "1勝0敗" : s < 0 ? "0勝1敗" : "0勝0敗"));
+			inserted++;
+		}
+		if (inserted == 0)
+			return "❌ 未寫入任何分數";
+		recomputeSummary();
+		return "✅ 已登錄 " + formatDate(date) + " 戰績\n" + msg.toString().trim();
+	}
 
-        // 插入每人分數
-        for (int i = idx; i < tokens.length; i += 2) {
-            String name = tokens[i];
-            int delta;
-            try {
-                delta = Integer.parseInt(tokens[i+1]);
-            } catch (NumberFormatException ex) {
-                return "❌ 分數必須為整數，例如 +2000 或 -300";
-            }
-            jdbc.update("INSERT INTO mahjong_records(round_id, datetime, player, score) VALUES (?, ?, ?, ?)",
-                    roundId, datetime, name, delta);
-        }
+	@Transactional
+	public String deleteByDateCommand(String text) {
+		String date = text.replaceAll("[^\\d]", "");
+		if (date.length() != 8)
+			return "❌ 請提供 yyyyMMdd 日期";
+		int r = deleteByDate(date);
+		recomputeSummary();
+		return r == 0 ? "ℹ️ 該日期無資料" : "🗑 已刪除 " + date + " 戰績";
+	}
 
-        // 更新 summary
-        recomputeSummary();
+	private int deleteByDate(String date) {
+		List<Long> ids = jdbc.queryForList("SELECT id FROM mahjong_rounds WHERE date=?", Long.class, date);
+		int cnt = 0;
+		for (Long id : ids) {
+			cnt += jdbc.update("DELETE FROM mahjong_records WHERE round_id=?", id);
+			cnt += jdbc.update("DELETE FROM mahjong_rounds WHERE id=?", id);
+		}
+		return cnt;
+	}
 
-        // 回覆最新統計
-        return status();
-    }
+	public String status() {
+		List<Map<String, Object>> rows = jdbc
+				.queryForList("SELECT player,SUM(score) total," + "SUM(CASE WHEN score>0 THEN 1 ELSE 0 END) wins,"
+						+ "SUM(CASE WHEN score<0 THEN 1 ELSE 0 END) loses " + "FROM mahjong_records GROUP BY player");
+		if (rows.isEmpty())
+			return "目前沒有任何戰績。";
+		rows.sort(
+				(a, b) -> Integer.compare(((Number) b.get("total")).intValue(), ((Number) a.get("total")).intValue()));
+		StringBuilder sb = new StringBuilder("📊 目前總戰績：\n");
+		for (Map<String, Object> r : rows) {
+			sb.append(
+					String.format("%s %+d (%d勝%d敗)\n", r.get("player"), r.get("total"), r.get("wins"), r.get("loses")));
+		}
+		return sb.toString().trim();
+	}
 
-    public String status() {
-        List<PlayerSummary> list = jdbc.query("SELECT player,SUM(score) AS total, SUM(score*score) AS sumsq, COUNT(*) AS n FROM mahjong_records GROUP BY player",
-        		rs -> {
-            List<PlayerSummary> res = new ArrayList<>();
-            while (rs.next()) {
-                String p = rs.getString("player");
-                int total = rs.getInt("total");
-                long sumsq = rs.getLong("sumsq");
-                int n = rs.getInt("n");
-                double stddev = StatsCalculator.stddev(total, sumsq, n);
-                res.add(new PlayerSummary(p, total, stddev));
-            }
-            return res;
-        });
+	public String showAllRounds() {
+		List<Map<String, Object>> rows = jdbc
+				.queryForList("SELECT date,player,score FROM mahjong_records ORDER BY date ASC,player ASC");
+		if (rows.isEmpty())
+			return "目前沒有任何戰績記錄。";
+		StringBuilder sb = new StringBuilder("📅 所有戰績：\n");
+		String cur = "";
+		StringBuilder line = new StringBuilder();
+		for (Map<String, Object> r : rows) {
+			String d = (String) r.get("date");
+			String p = (String) r.get("player");
+			int s = ((Number) r.get("score")).intValue();
+			if (!d.equals(cur)) {
+				if (!cur.isEmpty()) {
+					sb.append(cur).append("：").append(line.toString().replaceAll(", $", "")).append("\n");
+					line.setLength(0);
+				}
+				cur = d;
+			}
+			line.append(String.format("%s %+d, ", p, s));
+		}
+		if (!cur.isEmpty())
+			sb.append(cur).append("：").append(line.toString().replaceAll(", $", "")).append("");
+		return sb.toString().trim();
+	}
 
-        if (list.isEmpty()) return "目前沒有任何戰績。";
+	private void recomputeSummary() {
+		/* dummy for compatibility */ }
 
-        list.sort(Comparator.comparingInt(PlayerSummary::getTotalScore).reversed());
-
-        StringBuilder sb = new StringBuilder("📊 麻將戰績統計\n");
-        sb.append("───────────────\n");
-        for (PlayerSummary ps : list) {
-            sb.append(String.format("%s：總分 %d，標準差 %.1f\n", ps.getPlayer(), ps.getTotalScore(), ps.getStddev()));
-        }
-        return sb.toString();
-    }
-
-    public String show10() {
-        // 取最近 10 個回合，顯示每回合各玩家成績
-        List<Map<String, Object>> rounds = jdbc.queryForList("SELECT id, datetime FROM mahjong_rounds ORDER BY id DESC LIMIT 10 ");
-
-        if (rounds.isEmpty()) return "目前沒有任何戰績。";
-
-        StringBuilder sb = new StringBuilder("🀄 近期 10 場戰績：\n");
-        for (Map<String,Object> r : rounds) {
-            long roundId = ((Number)r.get("id")).longValue();
-            String dt = (String) r.get("datetime");
-            sb.append(dt).append("\n  ");
-            List<Map<String, Object>> recs = jdbc.queryForList("SELECT player, score FROM mahjong_records WHERE round_id = ? ORDER BY player ASC", roundId);
-            String line = recs.stream()
-                    .map(m -> m.get("player") + " " + ( (Number)m.get("score")).intValue())
-                    .collect(Collectors.joining(", "));
-            sb.append(line).append("\n");
-        }
-        return sb.toString();
-    }
-
-    @Transactional
-    public void recomputeSummary() {
-        // 清空 summary
-        jdbc.update("DELETE FROM mahjong_summary");
-        // 重新計算
-        jdbc.query("SELECT player, SUM(score) AS total, SUM(score*score) AS sumsq, COUNT(*) AS n FROM mahjong_records GROUP BY player", rs -> {
-            while (rs.next()) {
-                String p = rs.getString("player");
-                int total = rs.getInt("total");
-                long sumsq = rs.getLong("sumsq");
-                int n = rs.getInt("n");
-                double std = StatsCalculator.stddev(total, sumsq, n);
-                jdbc.update("INSERT INTO mahjong_summary(player, total_score, stddev) VALUES (?,?,?)",
-                        p, total, std);
-            }
-            return null;
-        });
-    }
-
-    private String normalizeDatetime(String raw) {
-        // 接受 YYYY-MM-DD 或 YYYY-MM-DDTHH:mm 或 完整 ISO
-        try {
-            if (raw.length() == 10) { // YYYY-MM-DD -> assume 00:00 Taipei
-                ZonedDateTime zdt = ZonedDateTime.of(
-                        Integer.parseInt(raw.substring(0,4)),
-                        Integer.parseInt(raw.substring(5,7)),
-                        Integer.parseInt(raw.substring(8,10)),
-                        0,0,0,0, TAIPEI);
-                return zdt.format(ISO);
-            }
-            // 若缺少時區，補上 +08:00
-            if (!raw.contains("+") && !raw.endsWith("Z")) {
-                // parse as local Taipei
-                String t = raw;
-                if (t.length()==16) t += ":00"; // add seconds if missing
-                ZonedDateTime zdt = ZonedDateTime.of(
-                        Integer.parseInt(t.substring(0,4)),
-                        Integer.parseInt(t.substring(5,7)),
-                        Integer.parseInt(t.substring(8,10)),
-                        Integer.parseInt(t.substring(11,13)),
-                        Integer.parseInt(t.substring(14,16)),
-                        (t.length()>=19 ? Integer.parseInt(t.substring(17,19)) : 0),
-                        0, TAIPEI);
-                return zdt.format(ISO);
-            }
-            return ZonedDateTime.parse(raw).withZoneSameInstant(TAIPEI).format(ISO);
-        } catch (Exception e) {
-            return ZonedDateTime.now(TAIPEI).format(ISO);
-        }
-    }
+	private String formatDate(String d) {
+		return d.substring(0, 4) + "/" + d.substring(4, 6) + "/" + d.substring(6, 8);
+	}
 }
