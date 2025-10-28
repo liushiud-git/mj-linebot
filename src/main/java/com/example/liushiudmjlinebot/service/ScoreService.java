@@ -18,38 +18,50 @@ public class ScoreService {
 
 	@Transactional
 	public String addByFormattedLine(String text) {
-		Matcher m = LINE_PATTERN.matcher(text.trim());
-		if (!m.matches())
-			return "❌ 格式錯誤，請用：20251017 戰績：隨 -7700,蕭 -2100,馬 5700,堂 3700,鳥 400";
-		String date = m.group("date");
-		String pairs = m.group("pairs");
+		try {
+			Matcher m = LINE_PATTERN.matcher(text.trim());
+			if (!m.matches())
+				return "❌ 格式錯誤，請用：20251017 戰績：隨 -7700,蕭 -2100,馬 5700,堂 3700,鳥 400";
+			String date = m.group("date");
+			String pairs = m.group("pairs");
+			
+			System.out.println("date = " + date);
+			System.out.println("pairs = " + pairs);
 
-		deleteByDate(date);
-		jdbc.update("INSERT INTO mahjong_rounds(date) VALUES (?)", date);
-		Long roundId = jdbc.queryForObject("SELECT last_insert_rowid()", Long.class);
+			deleteByDate(date);
+			jdbc.update("INSERT INTO mahjong_rounds(date) VALUES (?)", date);
+			Long roundId = jdbc.queryForObject("SELECT last_insert_rowid()", Long.class);
 
-		int inserted = 0;
-		StringBuilder msg = new StringBuilder();
-		for (String seg : pairs.split("\s*,\s*")) {
-			String[] kv = seg.trim().split("\s+");
-			if (kv.length != 2)
-				continue;
-			String p = kv[0];
-			int s;
-			try {
-				s = Integer.parseInt(kv[1]);
-			} catch (Exception e) {
-				continue;
+			int inserted = 0;
+			StringBuilder msg = new StringBuilder();
+			for (String seg : pairs.split("\s*,\s*")) {
+				String[] kv = seg.trim().split("\s+");
+				if (kv.length != 2)
+					continue;
+				String p = kv[0];
+				System.out.println("name = " + p);
+				int s;
+				try {
+					s = Integer.parseInt(kv[1]);
+					System.out.println("value = " + s);
+				} catch (Exception e) {
+					continue;
+				}
+				jdbc.update("INSERT INTO mahjong_records(round_id,date,player,score) VALUES (?,?,?,?)", roundId, date, p,
+						s);
+				msg.append(String.format("%s %+d (%s)\n", p, s, s > 0 ? "1勝0敗" : s < 0 ? "0勝1敗" : "0勝0敗"));
+				inserted++;
 			}
-			jdbc.update("INSERT INTO mahjong_records(round_id,date,player,score) VALUES (?,?,?,?)", roundId, date, p,
-					s);
-			msg.append(String.format("%s %+d (%s)\n", p, s, s > 0 ? "1勝0敗" : s < 0 ? "0勝1敗" : "0勝0敗"));
-			inserted++;
+			if (inserted == 0)
+				return "❌ 未寫入任何分數";
+			recomputeSummary();
+			return "✅ 已登錄 " + formatDate(date) + " 戰績\n" + msg.toString().trim();
+			
+		}catch(Exception ex) {
+			System.out.println("exception " + ex.getMessage());
+			return "哎啊~新增有問題";
 		}
-		if (inserted == 0)
-			return "❌ 未寫入任何分數";
-		recomputeSummary();
-		return "✅ 已登錄 " + formatDate(date) + " 戰績\n" + msg.toString().trim();
+		
 	}
 
 	@Transactional
