@@ -16,9 +16,9 @@ public class MahjongBotController {
 	@EventMapping
 	public TextMessage handleTextMessage(MessageEvent<TextMessageContent> event) {
 		String text = event.getMessage().getText().trim();
-		if (text.matches("/add") || text.equals("新增戰績")) {
-			return new TextMessage(scoreService.addByFormattedLine(text));
-		} else if (text.startsWith("/del") || text.equals("刪除戰績")) {
+		if (text.startsWith("/add")) {
+			return new TextMessage(scoreService.addByFormattedLine(text.substring(4)));
+		} else if (text.startsWith("/del")) {
 			return new TextMessage(scoreService.deleteByDateCommand(text));
 		} else if (text.equals("/status") || text.equals("目前戰績")) {
 			return new TextMessage(scoreService.status());
