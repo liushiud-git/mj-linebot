@@ -21,7 +21,7 @@ public class ScoreService {
 
 	private static final Pattern LINE_PATTERN = Pattern.compile("^(?<date>\\d{8})\\s*戰績[:：]\\s*(?<pairs>.+)$");
 
-	@Transactional
+	//@Transactional
 	public String addByFormattedLine(String text) {
 		try {
 			Matcher m = LINE_PATTERN.matcher(text.trim());
@@ -34,7 +34,10 @@ public class ScoreService {
 			log.info("pairs = " + pairs);
 
 			deleteByDate(date);
-			jdbc.update("INSERT INTO mahjong_rounds(date) VALUES (?)", date);
+			
+			String sql = String.format("INSERT INTO mahjong_rounds(round_date) VALUES ('%s')", date);
+			jdbc.execute(sql);
+			
 			Long roundId = jdbc.queryForObject("SELECT last_insert_rowid()", Long.class);
 
 			int inserted = 0;
@@ -45,6 +48,7 @@ public class ScoreService {
 					continue;
 				String p = kv[0];
 				log.info("name = " + p);
+				p = rename(p);
 				int s;
 				try {
 					s = Integer.parseInt(kv[1]);
@@ -52,8 +56,10 @@ public class ScoreService {
 				} catch (Exception e) {
 					continue;
 				}
-				jdbc.update("INSERT INTO mahjong_records(round_id,date,player,score) VALUES (?,?,?,?)", roundId, date, p,
-						s);
+				
+				sql = String.format("INSERT INTO mahjong_records(round_id,round_date,player,score) VALUES (%d,'%s','%s','%s')", roundId, date, p, s);
+				jdbc.execute(sql);
+				
 				msg.append(String.format("%s %+d (%s)\n", p, s, s > 0 ? "1勝0敗" : s < 0 ? "0勝1敗" : "0勝0敗"));
 				inserted++;
 			}
@@ -63,13 +69,12 @@ public class ScoreService {
 			return "✅ 已登錄 " + formatDate(date) + " 戰績\n" + msg.toString().trim();
 			
 		}catch(Exception ex) {
-			log.info("exception " + ex.getMessage());
+			ex.printStackTrace();
 			return "哎啊~新增有問題";
 		}
 		
 	}
 
-	@Transactional
 	public String deleteByDateCommand(String text) {
 		String date = text.replaceAll("[^\\d]", "");
 		if (date.length() != 8)
@@ -80,11 +85,11 @@ public class ScoreService {
 	}
 
 	private int deleteByDate(String date) {
-		List<Long> ids = jdbc.queryForList("SELECT id FROM mahjong_rounds WHERE date=?", Long.class, date);
+		List<Long> ids = jdbc.queryForList("SELECT id FROM mahjong_rounds WHERE round_date=?", Long.class, date);
 		int cnt = 0;
 		for (Long id : ids) {
-			cnt += jdbc.update("DELETE FROM mahjong_records WHERE round_id=?", id);
-			cnt += jdbc.update("DELETE FROM mahjong_rounds WHERE id=?", id);
+			cnt += jdbc.update("DELETE FROM mahjong_records WHERE round_id=" + id);
+			cnt += jdbc.update("DELETE FROM mahjong_rounds WHERE id=" + id);
 		}
 		return cnt;
 	}
@@ -100,22 +105,23 @@ public class ScoreService {
 		StringBuilder sb = new StringBuilder("📊 目前總戰績：\n");
 		for (Map<String, Object> r : rows) {
 			sb.append(
-					String.format("%s %+d (%d勝%d敗)\n", r.get("player"), r.get("total"), r.get("wins"), r.get("loses")));
+					String.format("%-4s %,6d (%d勝%d敗)\n", r.get("player"), r.get("total"), r.get("wins"), r.get("loses")));
 		}
 		return sb.toString().trim();
 	}
 
 	public String showAllRounds() {
 		List<Map<String, Object>> rows = jdbc
-				.queryForList("SELECT date,player,score FROM mahjong_records ORDER BY date ASC,player ASC");
+				.queryForList("SELECT round_date,player,score FROM mahjong_records ORDER BY round_date ASC,player ASC");
 		if (rows.isEmpty())
 			return "目前沒有任何戰績記錄。";
 		StringBuilder sb = new StringBuilder("📅 所有戰績：\n");
 		String cur = "";
 		StringBuilder line = new StringBuilder();
 		for (Map<String, Object> r : rows) {
-			String d = (String) r.get("date");
+			String d = (String) r.get("round_date");
 			String p = (String) r.get("player");
+			p = rename(p);
 			int s = ((Number) r.get("score")).intValue();
 			if (!d.equals(cur)) {
 				if (!cur.isEmpty()) {
@@ -124,11 +130,30 @@ public class ScoreService {
 				}
 				cur = d;
 			}
-			line.append(String.format("%s %+d, ", p, s));
+			line.append(String.format("%s %+,d, ", p, s));
 		}
 		if (!cur.isEmpty())
 			sb.append(cur).append("：").append(line.toString().replaceAll(", $", "")).append("");
 		return sb.toString().trim();
+	}
+
+	private String rename(String p) {
+		if(p.equalsIgnoreCase("蕭")) {
+			return "蕭先生";
+		} else if(p.equalsIgnoreCase("隨")) {
+			return "隨緣";
+		} else if(p.equalsIgnoreCase("鹹")) {
+			return "鹹蛋";
+		} else if(p.equalsIgnoreCase("堂")) {
+			return "陳堂弟";
+		} else if(p.equalsIgnoreCase("馬") || p.equalsIgnoreCase("快")) {
+			return "快馬";
+		} else if(p.equalsIgnoreCase("肥") || p.equalsIgnoreCase("懶")) {
+			return "懶肥";
+		} else if(p.equalsIgnoreCase("鳥")) {
+			return "阿鳥";
+		}
+		return p;
 	}
 
 	private void recomputeSummary() {

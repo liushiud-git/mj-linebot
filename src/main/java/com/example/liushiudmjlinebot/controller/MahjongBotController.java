@@ -26,14 +26,11 @@ public class MahjongBotController {
 		
 		if (text.startsWith("/add")) {
 			return new TextMessage(scoreService.addByFormattedLine(text.substring(4)));
-		} else if (text.startsWith("/del")) {
-			return new TextMessage(scoreService.deleteByDateCommand(text));
-		} else if (text.equals("/status") || text.equals("目前戰績")) {
+		} else if (text.equals("/status") || text.equals("排行榜")) {
 			return new TextMessage(scoreService.status());
-		} else if (text.equals("/show") || text.equals("顯示")) {
+		} else if (text.equals("/show") || text.equals("全部戰績")) {
 			return new TextMessage(scoreService.showAllRounds());
 		}
-		return new TextMessage("指令：\n" + "1) 新增：/add 20251017 戰績：隨 -7700,蕭 -2100,馬 5700,堂 3700,鳥 400\n"
-				+ "2) 刪除：/del 20251017\n" + "3) 查詢：/status\n" + "4) 列出：/show");
+		return new TextMessage("我只個機器人，請給我正確的指令，例如：「排行榜」看目前的戰績，「全部戰績」看全部戰績");
 	}
 }

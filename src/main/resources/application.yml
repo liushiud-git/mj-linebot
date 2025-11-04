@@ -10,8 +10,8 @@ spring:
     type: org.springframework.jdbc.datasource.SimpleDriverDataSource
   sql:
     init:
-      mode: always
-      schema-locations: classpath:schema.sql
+      mode: never
+#      schema-locations: classpath:schema.sql
 
 line.bot:
   channel-token: ltryhCt6Pk0E40zVQ+C8hKPraZQXaJIzYWiFDKynzGRubpcTh31tmLIw0JYgO/p4P4Q3Jovq6DK9YPjySGRLHXn0mn69yY0h7AqwYI/nDswutjBFE+dZCQVYadnzPs5Yojc1aFpA08g0nFJ+imTa2AdB04t89/1O/w1cDnyilFU=
