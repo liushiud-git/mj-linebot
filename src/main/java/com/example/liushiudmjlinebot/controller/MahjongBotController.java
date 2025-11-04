@@ -31,6 +31,7 @@ public class MahjongBotController {
 		} else if (text.equals("/show") || text.equals("全部戰績")) {
 			return new TextMessage(scoreService.showAllRounds());
 		}
+		
 		return new TextMessage("我只個機器人，請給我正確的指令，例如：「排行榜」看目前的戰績，「全部戰績」看全部戰績");
 	}
 }

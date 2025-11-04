@@ -4,13 +4,13 @@ DROP TABLE IF EXISTS mahjong_rounds;
 
 CREATE TABLE mahjong_rounds (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  date TEXT UNIQUE NOT NULL
+  round_date TEXT UNIQUE NOT NULL
 );
 
 CREATE TABLE mahjong_records (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   round_id INTEGER NOT NULL,
-  date TEXT NOT NULL,
+  round_date TEXT NOT NULL,
   player TEXT NOT NULL,
   score INTEGER NOT NULL,
   FOREIGN KEY (round_id) REFERENCES mahjong_rounds(id)
