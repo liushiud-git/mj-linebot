@@ -11,17 +11,17 @@ import java.util.regex.*;
 
 @Service
 public class ScoreService {
-	
+
 	private final JdbcTemplate jdbc;
 	private static final Logger log = LoggerFactory.getLogger(ScoreService.class);
-	
+
 	public ScoreService(JdbcTemplate jdbc) {
 		this.jdbc = jdbc;
 	}
 
 	private static final Pattern LINE_PATTERN = Pattern.compile("^(?<date>\\d{8})\\s*戰績[:：]\\s*(?<pairs>.+)$");
 
-	//@Transactional
+	// @Transactional
 	public String addByFormattedLine(String text) {
 		try {
 			Matcher m = LINE_PATTERN.matcher(text.trim());
@@ -29,15 +29,15 @@ public class ScoreService {
 				return "❌ 格式錯誤，請用：20251017 戰績：隨 -7700,蕭 -2100,馬 5700,堂 3700,鳥 400";
 			String date = m.group("date");
 			String pairs = m.group("pairs");
-			
+
 			log.info("date = " + date);
 			log.info("pairs = " + pairs);
 
 			deleteByDate(date);
-			
+
 			String sql = String.format("INSERT INTO mahjong_rounds(round_date) VALUES ('%s')", date);
 			jdbc.execute(sql);
-			
+
 			Long roundId = jdbc.queryForObject("SELECT last_insert_rowid()", Long.class);
 
 			int inserted = 0;
@@ -56,10 +56,12 @@ public class ScoreService {
 				} catch (Exception e) {
 					continue;
 				}
-				
-				sql = String.format("INSERT INTO mahjong_records(round_id,round_date,player,score) VALUES (%d,'%s','%s','%s')", roundId, date, p, s);
+
+				sql = String.format(
+						"INSERT INTO mahjong_records(round_id,round_date,player,score) VALUES (%d,'%s','%s','%s')",
+						roundId, date, p, s);
 				jdbc.execute(sql);
-				
+
 				msg.append(String.format("%s %+d (%s)\n", p, s, s > 0 ? "1勝0敗" : s < 0 ? "0勝1敗" : "0勝0敗"));
 				inserted++;
 			}
@@ -67,12 +69,12 @@ public class ScoreService {
 				return "❌ 未寫入任何分數";
 			recomputeSummary();
 			return "✅ 已登錄 " + formatDate(date) + " 戰績\n" + msg.toString().trim();
-			
-		}catch(Exception ex) {
+
+		} catch (Exception ex) {
 			ex.printStackTrace();
 			return "哎啊~新增有問題";
 		}
-		
+
 	}
 
 	public String deleteByDateCommand(String text) {
@@ -104,18 +106,32 @@ public class ScoreService {
 				(a, b) -> Integer.compare(((Number) b.get("total")).intValue(), ((Number) a.get("total")).intValue()));
 		StringBuilder sb = new StringBuilder("📊 目前總戰績：\n");
 		for (Map<String, Object> r : rows) {
-			
-	        String name = (String) r.get("player");
-	        int total = ((Number) r.get("total")).intValue();
-	        int wins = ((Number) r.get("wins")).intValue();
-	        int loses = ((Number) r.get("loses")).intValue();
-	        int totalGames = wins + loses;
-	        double winRate = totalGames == 0 ? 0.0 : (wins * 100.0 / totalGames);
-	        
-	        sb.append(String.format("%-4s %,6d (%d勝%d敗) %6.1f%%\n", name, total, wins, loses, winRate));
-			
-			// sb.append(String.format("%-4s %,6d (%d勝%d敗)\n", r.get("player"), r.get("total"), r.get("wins"), r.get("loses")));
+
+			String name = (String) r.get("player");
+			int total = ((Number) r.get("total")).intValue();
+			int wins = ((Number) r.get("wins")).intValue();
+			int loses = ((Number) r.get("loses")).intValue();
+			int totalGames = wins + loses;
+			double winRate = totalGames == 0 ? 0.0 : (wins * 100.0 / totalGames);
+
+			sb.append(String.format("%-4s %,6d (%d勝%d敗) %6.1f%%\n", name, total, wins, loses, winRate));
+
+			// sb.append(String.format("%-4s %,6d (%d勝%d敗)\n", r.get("player"),
+			// r.get("total"), r.get("wins"), r.get("loses")));
 		}
+
+		Map<String, Object> topWin = jdbc.queryForMap("SELECT round_date, player, score FROM mahjong_records "
+				+ "WHERE score = (SELECT MAX(score) FROM mahjong_records)");
+		
+		Map<String, Object> topLose = jdbc.queryForMap("SELECT round_date, player, score FROM mahjong_records "
+				+ "WHERE score = (SELECT MIN(score) FROM mahjong_records)");
+
+		sb.append("\n🏆 單場勝最多：").append(String.format("%s %+d（%s）", topWin.get("player"),
+				((Number) topWin.get("score")).intValue(), topWin.get("round_date")));
+
+		sb.append("\n💀 單場輸最多：").append(String.format("%s %+d（%s）", topLose.get("player"),
+				((Number) topLose.get("score")).intValue(), topLose.get("round_date")));
+
 		return sb.toString().trim();
 	}
 
@@ -147,19 +163,19 @@ public class ScoreService {
 	}
 
 	private String rename(String p) {
-		if(p.equalsIgnoreCase("蕭")) {
+		if (p.equalsIgnoreCase("蕭")) {
 			return "蕭先生";
-		} else if(p.equalsIgnoreCase("隨")) {
+		} else if (p.equalsIgnoreCase("隨")) {
 			return "隨緣";
-		} else if(p.equalsIgnoreCase("鹹")) {
+		} else if (p.equalsIgnoreCase("鹹")) {
 			return "鹹蛋";
-		} else if(p.equalsIgnoreCase("堂")) {
+		} else if (p.equalsIgnoreCase("堂")) {
 			return "陳堂弟";
-		} else if(p.equalsIgnoreCase("馬") || p.equalsIgnoreCase("快")) {
+		} else if (p.equalsIgnoreCase("馬") || p.equalsIgnoreCase("快")) {
 			return "快馬";
-		} else if(p.equalsIgnoreCase("肥") || p.equalsIgnoreCase("懶")) {
+		} else if (p.equalsIgnoreCase("肥") || p.equalsIgnoreCase("懶")) {
 			return "懶肥";
-		} else if(p.equalsIgnoreCase("鳥")) {
+		} else if (p.equalsIgnoreCase("鳥")) {
 			return "阿鳥";
 		}
 		return p;
