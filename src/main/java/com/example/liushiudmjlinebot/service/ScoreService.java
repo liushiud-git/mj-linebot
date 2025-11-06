@@ -4,7 +4,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.*;
 
@@ -118,9 +121,6 @@ public class ScoreService {
 		// 今年
 		String yearPrefix = String.valueOf(java.time.Year.now().getValue());
 		
-//		List<Map<String, Object>> rows = jdbc
-//				.queryForList("SELECT player,SUM(score) total," + "SUM(CASE WHEN score>0 THEN 1 ELSE 0 END) wins,"
-//						+ "SUM(CASE WHEN score<0 THEN 1 ELSE 0 END) loses " + "FROM mahjong_records GROUP BY player");
 		List<Map<String,Object>> rows = jdbc.queryForList(
 			    "SELECT player, " +
 			    "SUM(score) total, " +
@@ -155,21 +155,39 @@ public class ScoreService {
 			sb.append(String.format("%-4s %,6d (%d勝%d敗) %6.1f%%\n", name, total, wins, loses, winRate));
 		}
 
-		Map<String, Object> topWin = jdbc.queryForMap("SELECT round_date, player, score FROM mahjong_records "
-				+ "WHERE score = (SELECT MAX(score) FROM mahjong_records)");
-		
-		Map<String, Object> topLose = jdbc.queryForMap("SELECT round_date, player, score FROM mahjong_records "
-				+ "WHERE score = (SELECT MIN(score) FROM mahjong_records)");
+		// 1️⃣ 先查出最高與最低分值
+		Integer maxScore = jdbc.queryForObject("SELECT MAX(score) FROM mahjong_records where round_date LIKE '" + yearPrefix + "%'" , Integer.class);
+		Integer minScore = jdbc.queryForObject("SELECT MIN(score) FROM mahjong_records where round_date LIKE '" + yearPrefix + "%'", Integer.class);
 
-		sb.append("────────────────────────────────\n");
-		sb.append("\n🏆 單場勝最多：").append(String.format("%s %,6d（%s）", topWin.get("player"),
-				((Number) topWin.get("score")).intValue(), topWin.get("round_date")));
+		// 2️⃣ 再取出所有達到這個分數的紀錄
+		List<Map<String, Object>> topWins = jdbc.queryForList(
+		    "SELECT round_date, player, score FROM mahjong_records WHERE score = ? ORDER BY round_date", maxScore);
+		List<Map<String, Object>> topLoses = jdbc.queryForList(
+		    "SELECT round_date, player, score FROM mahjong_records WHERE score = ? ORDER BY round_date", minScore);
 
-		sb.append("\n💀 單場輸最多：").append(String.format("%s %,6d（%s）", topLose.get("player"),
-				((Number) topLose.get("score")).intValue(), topLose.get("round_date")));
+		// 3️⃣ 組合成字串輸出
+		StringBuilder winStr = new StringBuilder();
+		for (Map<String, Object> r : topWins) {
+		    winStr.append(String.format("%s %,6d（%s）\n",
+		        r.get("player"), ((Number)r.get("score")).intValue(), formatDate2(r.get("round_date"))));
+		}
+		StringBuilder loseStr = new StringBuilder();
+		for (Map<String, Object> r : topLoses) {
+		    loseStr.append(String.format("%s %,6d（%s）\n",
+		        r.get("player"), ((Number)r.get("score")).intValue(), formatDate2(r.get("round_date"))));
+		}
+
+		sb.append("\n🏆 單場勝最多：\n").append(winStr);
+		sb.append("💀 單場輸最多：\n").append(loseStr);
 
 		return sb.toString().trim();
 	}
+	
+	public String formatDate2(Object raw) {
+        LocalDate date = LocalDate.parse(raw.toString(), DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String formatted = date.getYear() + "/" + date.getMonthValue() + "/" + date.getDayOfMonth();
+        return formatted; // 輸出：2025/3/7
+    }
 	
 	/**
 	 * 所有的狀態
@@ -204,18 +222,30 @@ public class ScoreService {
 			sb.append(String.format("%-4s %,6d (%d勝%d敗) %6.1f%%\n", name, total, wins, loses, winRate));
 		}
 
-		Map<String, Object> topWin = jdbc.queryForMap("SELECT round_date, player, score FROM mahjong_records "
-				+ "WHERE score = (SELECT MAX(score) FROM mahjong_records)");
-		
-		Map<String, Object> topLose = jdbc.queryForMap("SELECT round_date, player, score FROM mahjong_records "
-				+ "WHERE score = (SELECT MIN(score) FROM mahjong_records)");
+		// 1️⃣ 先查出最高與最低分值
+		Integer maxScore = jdbc.queryForObject("SELECT MAX(score) FROM mahjong_records", Integer.class);
+		Integer minScore = jdbc.queryForObject("SELECT MIN(score) FROM mahjong_records", Integer.class);
 
-		sb.append("────────────────────────────────\n");
-		sb.append("\n🏆 單場勝最多：").append(String.format("%s %,6d（%s）", topWin.get("player"),
-				((Number) topWin.get("score")).intValue(), topWin.get("round_date")));
+		// 2️⃣ 再取出所有達到這個分數的紀錄
+		List<Map<String, Object>> topWins = jdbc.queryForList(
+		    "SELECT round_date, player, score FROM mahjong_records WHERE score = ? ORDER BY round_date", maxScore);
+		List<Map<String, Object>> topLoses = jdbc.queryForList(
+		    "SELECT round_date, player, score FROM mahjong_records WHERE score = ? ORDER BY round_date", minScore);
 
-		sb.append("\n💀 單場輸最多：").append(String.format("%s %,6d（%s）", topLose.get("player"),
-				((Number) topLose.get("score")).intValue(), topLose.get("round_date")));
+		// 3️⃣ 組合成字串輸出
+		StringBuilder winStr = new StringBuilder();
+		for (Map<String, Object> r : topWins) {
+		    winStr.append(String.format("%s %+d（%s）\n",
+		        r.get("player"), ((Number)r.get("score")).intValue(), formatDate2(r.get("round_date"))));
+		}
+		StringBuilder loseStr = new StringBuilder();
+		for (Map<String, Object> r : topLoses) {
+		    loseStr.append(String.format("%s %+d（%s）\n",
+		        r.get("player"), ((Number)r.get("score")).intValue(), formatDate2(r.get("round_date"))));
+		}
+
+		sb.append("\n🏆 單場勝最多：\n").append(winStr);
+		sb.append("💀 單場輸最多：\n").append(loseStr);
 
 		return sb.toString().trim();
 	}
@@ -269,7 +299,7 @@ public class ScoreService {
 	private void recomputeSummary() {
 		/* dummy for compatibility */ }
 
-	private String formatDate(String d) {
-		return d.substring(0, 4) + "/" + d.substring(4, 6) + "/" + d.substring(6, 8);
+	private String formatDate(Object object) {
+		return object.toString().substring(0, 4) + "/" + object.toString().substring(4, 6) + "/" + object.toString().substring(6, 8);
 	}
 }
