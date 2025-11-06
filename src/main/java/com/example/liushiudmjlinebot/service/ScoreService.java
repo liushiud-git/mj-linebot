@@ -4,7 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.regex.*;
@@ -21,7 +20,11 @@ public class ScoreService {
 
 	private static final Pattern LINE_PATTERN = Pattern.compile("^(?<date>\\d{8})\\s*戰績[:：]\\s*(?<pairs>.+)$");
 
-	// @Transactional
+	/**
+	 * 增加一筆
+	 * @param text
+	 * @return
+	 */
 	public String addByFormattedLine(String text) {
 		try {
 			Matcher m = LINE_PATTERN.matcher(text.trim());
@@ -77,6 +80,11 @@ public class ScoreService {
 
 	}
 
+	/**
+	 * 刪除
+	 * @param text
+	 * @return
+	 */
 	public String deleteByDateCommand(String text) {
 		String date = text.replaceAll("[^\\d]", "");
 		if (date.length() != 8)
@@ -86,6 +94,11 @@ public class ScoreService {
 		return r == 0 ? "ℹ️ 該日期無資料" : "🗑 已刪除 " + date + " 戰績";
 	}
 
+	/**
+	 * 依日期刪除
+	 * @param date
+	 * @return
+	 */
 	private int deleteByDate(String date) {
 		List<Long> ids = jdbc.queryForList("SELECT id FROM mahjong_rounds WHERE round_date=?", Long.class, date);
 		int cnt = 0;
@@ -96,15 +109,40 @@ public class ScoreService {
 		return cnt;
 	}
 
+	/**
+	 * 所有的狀態
+	 * @return
+	 */
 	public String status() {
-		List<Map<String, Object>> rows = jdbc
-				.queryForList("SELECT player,SUM(score) total," + "SUM(CASE WHEN score>0 THEN 1 ELSE 0 END) wins,"
-						+ "SUM(CASE WHEN score<0 THEN 1 ELSE 0 END) loses " + "FROM mahjong_records GROUP BY player");
-		if (rows.isEmpty())
+		
+		// 今年
+		String yearPrefix = String.valueOf(java.time.Year.now().getValue());
+		
+//		List<Map<String, Object>> rows = jdbc
+//				.queryForList("SELECT player,SUM(score) total," + "SUM(CASE WHEN score>0 THEN 1 ELSE 0 END) wins,"
+//						+ "SUM(CASE WHEN score<0 THEN 1 ELSE 0 END) loses " + "FROM mahjong_records GROUP BY player");
+		List<Map<String,Object>> rows = jdbc.queryForList(
+			    "SELECT player, " +
+			    "SUM(score) total, " +
+			    "SUM(CASE WHEN score > 0 THEN 1 ELSE 0 END) wins, " +
+			    "SUM(CASE WHEN score < 0 THEN 1 ELSE 0 END) loses " +
+			    "FROM mahjong_records " +
+			    "WHERE round_date LIKE '" +  yearPrefix + "%'" +      // ← 只統計今年
+			    "GROUP BY player"
+			);
+		
+		if (rows.isEmpty()) {
 			return "目前沒有任何戰績。";
-		rows.sort(
-				(a, b) -> Integer.compare(((Number) b.get("total")).intValue(), ((Number) a.get("total")).intValue()));
-		StringBuilder sb = new StringBuilder("📊 目前總戰績：\n");
+		}
+		else {
+			rows.sort(
+					(a, b) -> Integer.compare(((Number) b.get("total")).intValue(), ((Number) a.get("total")).intValue()));
+		}
+			
+		StringBuilder sb = new StringBuilder("📊 " + yearPrefix + "目前總戰績：\n");
+		sb.append("姓名　　戰績　　　　勝率\n");
+		sb.append("────────────────────────────────\n");
+		
 		for (Map<String, Object> r : rows) {
 
 			String name = (String) r.get("player");
@@ -115,9 +153,6 @@ public class ScoreService {
 			double winRate = totalGames == 0 ? 0.0 : (wins * 100.0 / totalGames);
 
 			sb.append(String.format("%-4s %,6d (%d勝%d敗) %6.1f%%\n", name, total, wins, loses, winRate));
-
-			// sb.append(String.format("%-4s %,6d (%d勝%d敗)\n", r.get("player"),
-			// r.get("total"), r.get("wins"), r.get("loses")));
 		}
 
 		Map<String, Object> topWin = jdbc.queryForMap("SELECT round_date, player, score FROM mahjong_records "
@@ -126,10 +161,60 @@ public class ScoreService {
 		Map<String, Object> topLose = jdbc.queryForMap("SELECT round_date, player, score FROM mahjong_records "
 				+ "WHERE score = (SELECT MIN(score) FROM mahjong_records)");
 
-		sb.append("\n🏆 單場勝最多：").append(String.format("%s %+d（%s）", topWin.get("player"),
+		sb.append("────────────────────────────────\n");
+		sb.append("\n🏆 單場勝最多：").append(String.format("%s %,6d（%s）", topWin.get("player"),
 				((Number) topWin.get("score")).intValue(), topWin.get("round_date")));
 
-		sb.append("\n💀 單場輸最多：").append(String.format("%s %+d（%s）", topLose.get("player"),
+		sb.append("\n💀 單場輸最多：").append(String.format("%s %,6d（%s）", topLose.get("player"),
+				((Number) topLose.get("score")).intValue(), topLose.get("round_date")));
+
+		return sb.toString().trim();
+	}
+	
+	/**
+	 * 所有的狀態
+	 * @return
+	 */
+	public String statusAll() {
+		
+		List<Map<String, Object>> rows = jdbc
+				.queryForList("SELECT player,SUM(score) total," + "SUM(CASE WHEN score>0 THEN 1 ELSE 0 END) wins,"
+						+ "SUM(CASE WHEN score<0 THEN 1 ELSE 0 END) loses " + "FROM mahjong_records GROUP BY player");
+		if (rows.isEmpty()) {
+			return "目前沒有任何戰績。";
+		}
+		else {
+			rows.sort(
+					(a, b) -> Integer.compare(((Number) b.get("total")).intValue(), ((Number) a.get("total")).intValue()));
+		}
+			
+		StringBuilder sb = new StringBuilder("📊 全部目前總戰績：\n");
+		sb.append("姓名　　戰績　　　　勝率\n");
+		sb.append("────────────────────────────────\n");
+		
+		for (Map<String, Object> r : rows) {
+
+			String name = (String) r.get("player");
+			int total = ((Number) r.get("total")).intValue();
+			int wins = ((Number) r.get("wins")).intValue();
+			int loses = ((Number) r.get("loses")).intValue();
+			int totalGames = wins + loses;
+			double winRate = totalGames == 0 ? 0.0 : (wins * 100.0 / totalGames);
+
+			sb.append(String.format("%-4s %,6d (%d勝%d敗) %6.1f%%\n", name, total, wins, loses, winRate));
+		}
+
+		Map<String, Object> topWin = jdbc.queryForMap("SELECT round_date, player, score FROM mahjong_records "
+				+ "WHERE score = (SELECT MAX(score) FROM mahjong_records)");
+		
+		Map<String, Object> topLose = jdbc.queryForMap("SELECT round_date, player, score FROM mahjong_records "
+				+ "WHERE score = (SELECT MIN(score) FROM mahjong_records)");
+
+		sb.append("────────────────────────────────\n");
+		sb.append("\n🏆 單場勝最多：").append(String.format("%s %,6d（%s）", topWin.get("player"),
+				((Number) topWin.get("score")).intValue(), topWin.get("round_date")));
+
+		sb.append("\n💀 單場輸最多：").append(String.format("%s %,6d（%s）", topLose.get("player"),
 				((Number) topLose.get("score")).intValue(), topLose.get("round_date")));
 
 		return sb.toString().trim();
