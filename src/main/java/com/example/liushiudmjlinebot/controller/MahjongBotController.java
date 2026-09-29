@@ -28,10 +28,12 @@ public class MahjongBotController {
 			return new TextMessage(scoreService.addByFormattedLine(text.substring(4)));
 		} else if (text.equals("/status") || text.equals("排行榜")) {
 			return new TextMessage(scoreService.status());
+		} else if (text.equals("/statusall") || text.equals("全部排行榜")) {
+			return new TextMessage(scoreService.statusAll());
 		} else if (text.equals("/show") || text.equals("全部戰績")) {
 			return new TextMessage(scoreService.showAllRounds());
-		} else if (text.equals("/show") || text.equals("全部排行榜")) {
-			return new TextMessage(scoreService.statusAll());
+		} else if (text.startsWith("/del")) {
+			return new TextMessage(scoreService.deleteByDateCommand(text.substring(4)));
 		}
 		
 		return null;

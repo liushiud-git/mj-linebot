@@ -1,36 +1,57 @@
 # liushiud-mj-linebot
 
-一個以 **Java + Spring Boot + LINE Bot SDK** 建立的戰績統計機器人，
+一個以 **Java 21 + Spring Boot 3 + LINE Bot SDK** 建立的麻將戰績統計機器人，
 資料庫採用 **Turso (libSQL / 雲端 SQLite)**。
 
-## 功能
-- `/add` 新增一場戰績（可選日期），例如：  
-  `/add A +2000 B -1500 C -500 D 0`  
-  或  
-  `/add 2025-10-19T20:01 A +2000 B -1500 C -500 D 0`
-- `/status` 顯示每位玩家的 **總分** 與 **標準差**（依總分由高到低）
-- `/show10` 顯示最近 **10 場回合** 的每人分數
+## 指令
 
-> 每次 `/add` 會同時：  
-> 1. 寫入 `mahjong_rounds` 與 `mahjong_records`  
-> 2. 重新計算每位玩家的總分與標準差，更新至 `mahjong_summary`
+| 指令 | 別名 | 說明 |
+|---|---|---|
+| `/add 20251017 戰績：隨 -7700,蕭 -2100,馬 5700,堂 3700,鳥 400` | | 登錄某一天的戰績 |
+| `/status` | `排行榜` | **今年**（台北時區）排行榜 |
+| `/statusall` | `全部排行榜` | 歷年全部排行榜 |
+| `/show` | `全部戰績` | 依日期列出所有戰績 |
+| `/del 20251017` | | 刪除某一天的戰績 |
+
+### `/add` 格式說明
+- 日期固定 `yyyyMMdd`，一天只保留一筆；同一天重複 `/add` 會**覆蓋**舊資料。
+- `戰績` 後可接半形 `:` 或全形 `：`。
+- 玩家之間以 `,`、`，` 或 `、` 分隔；名字與分數之間以空白分隔，分數為整數（可帶正負號）。
+- 任何一段格式錯誤或玩家重複時，整筆都不會寫入。
+- 部分暱稱會自動轉換（見 `ScoreService.rename()`），例如 `隨` → `隨緣`、`馬`／`快` → `快馬`。
+
+### 排行榜計算
+- 總分：該期間所有場次分數加總，依總分由高到低排序。
+- 勝敗：分數 > 0 記一勝、< 0 記一敗，0 分不計。勝率 = 勝 ÷ (勝 + 敗)。
+- 另列出該期間的單場最高分與最低分（同分則全部列出）。
 
 ---
+
+## 架構
+
+```
+controller/MahjongBotController   LINE webhook（/callback），依文字分派指令
+controller/HealthController       GET /healthz → OK
+service/ScoreService              指令解析、SQL、訊息排版
+resources/schema.sql              建表腳本（需手動執行）
+```
 
 ## 資料表結構
 
-- `mahjong_rounds(id, datetime)`：回合表
-- `mahjong_records(id, round_id, datetime, player, score)`：每局明細
-- `mahjong_summary(player, total_score, stddev)`：玩家總結
+- `mahjong_rounds(id, round_date)`：每天一筆，`round_date` 為 `yyyyMMdd`，UNIQUE
+- `mahjong_records(id, round_id, round_date, player, score)`：每位玩家每場一筆
 
-資料表會在應用程式啟動時自動建立（`src/main/resources/schema.sql`）。
+應用程式**不會**自動建表（`spring.sql.init.mode: never`）。
+首次建立資料庫時，請手動執行 `src/main/resources/schema.sql`（例如 `turso db shell <db> < schema.sql`）。
+此腳本使用 `IF NOT EXISTS`，重複執行不會影響既有資料。
+
+> 注意：DBeaver libSQL JDBC driver 透過 HTTP 逐句執行，**不支援 transaction**。
 
 ---
 
-## Turso 連線設定
+## 連線設定
 
-請先建立 Turso 資料庫，並取得連線資訊（URL 與 Token）。
-在部署環境（例如 Render）設定環境變數：
+在部署環境設定下列環境變數，並在 `application.yml` 以 `${...}` 引用：
 
 ```
 TURSO_DB_URL=libsql://你的db.turso.io
@@ -39,23 +60,16 @@ LINE_CHANNEL_TOKEN=你的LineBot Token
 LINE_CHANNEL_SECRET=你的LineBot Secret
 ```
 
-`application.yml` 中已設定使用 `org.sqlite.JDBC`，配合 DBeaver 的 LibSQL JDBC 驅動。
-（依 2025/10 資訊，`com.dbeaver.jdbc:com.dbeaver.jdbc.driver.libsql:1.0.4` 可正常連線 Turso）
+JDBC driver：`com.dbeaver.jdbc:com.dbeaver.jdbc.driver.libsql:1.0.4`（`com.dbeaver.jdbc.driver.libsql.LibSqlDriver`）。
 
 ---
 
 ## 本機開發（含 ngrok 測試）
 
-1. 設定環境變數（可用 `.env` 或你的 shell）：
-   ```bash
-   export TURSO_DB_URL=libsql://xxx.turso.io
-   export TURSO_DB_TOKEN=eyJ...
-   export LINE_CHANNEL_TOKEN=xxx
-   export LINE_CHANNEL_SECRET=xxx
-   ```
+1. 設定上述環境變數。
 2. 啟動：
    ```bash
-   ./mvnw spring-boot:run
+   mvn spring-boot:run
    ```
 3. 用 ngrok 開啟 8080：
    ```bash
@@ -71,26 +85,8 @@ LINE_CHANNEL_SECRET=你的LineBot Secret
 - **Start Command**：`java -jar target/liushiud-mj-linebot-1.0.0.jar`
 - 設定環境變數：`TURSO_DB_URL`、`TURSO_DB_TOKEN`、`LINE_CHANNEL_TOKEN`、`LINE_CHANNEL_SECRET`
 - Render 產生的網域 + `/callback` 設為 LINE Webhook URL
+- 可用 `/healthz` 作為健康檢查路徑
 
 > 免費方案若服務閒置可能會休眠，但資料保存在 **Turso**（不會遺失）。
 
----
-
-## 指令說明
-
-- `/add A +2000 B -1500 C -500 D 0`
-  - 預設使用「現在（台北時區）」時間
-- `/add 2025-10-19T20:05 A +200 B -200`
-  - 也可自帶時間（`YYYY-MM-DD` 或 `YYYY-MM-DDTHH:mm` 或完整 ISO8601）
-- `/status`
-  - 依總分排序，顯示：`玩家：總分 X，標準差 Y.Y`
-- `/show10`
-  - 依回合時間由近到遠，列出各回合玩家分數
-
----
-
-## 注意事項
-
-- 玩家名稱以空白分隔；分數請填整數（可帶正負號）。
-- 標準差用公式：`sqrt( (sum(score^2)/n) - (avg^2) )`。
-- 若未提供時間，系統會用台北時區的當下時間，並以 ISO8601 回存。
+也可使用 `Dockerfile`（需先 `mvn package` 產生 JAR）。

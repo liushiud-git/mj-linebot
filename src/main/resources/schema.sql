@@ -1,13 +1,11 @@
-DROP TABLE IF EXISTS mahjong_summary;
-DROP TABLE IF EXISTS mahjong_records;
-DROP TABLE IF EXISTS mahjong_rounds;
+-- 可重複執行：只建立不存在的資料表，不會刪除既有資料
 
-CREATE TABLE mahjong_rounds (
+CREATE TABLE IF NOT EXISTS mahjong_rounds (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   round_date TEXT UNIQUE NOT NULL
 );
 
-CREATE TABLE mahjong_records (
+CREATE TABLE IF NOT EXISTS mahjong_records (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   round_id INTEGER NOT NULL,
   round_date TEXT NOT NULL,
@@ -16,12 +14,6 @@ CREATE TABLE mahjong_records (
   FOREIGN KEY (round_id) REFERENCES mahjong_rounds(id)
 );
 
-CREATE INDEX idx_records_round ON mahjong_records(round_id);
-CREATE INDEX idx_records_player ON mahjong_records(player);
-
-CREATE TABLE mahjong_summary (
-  player TEXT PRIMARY KEY,
-  total_score INTEGER NOT NULL,
-  win_count INTEGER NOT NULL,
-  lose_count INTEGER NOT NULL
-);
+CREATE INDEX IF NOT EXISTS idx_records_round ON mahjong_records(round_id);
+CREATE INDEX IF NOT EXISTS idx_records_player ON mahjong_records(player);
+CREATE INDEX IF NOT EXISTS idx_records_date ON mahjong_records(round_date);
