@@ -2,9 +2,11 @@ package com.example.liushiudmjlinebot.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.NestedExceptionUtils;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.Year;
 import java.time.ZoneId;
@@ -29,7 +31,8 @@ public class ScoreService {
 		this.jdbc = jdbc;
 	}
 
-	private static final Pattern LINE_PATTERN = Pattern.compile("^(?<date>\\d{8})\\s*戰績[:：]\\s*(?<pairs>.+)$");
+	// DOTALL：手機上若把戰績分成多行輸入也能解析
+	private static final Pattern LINE_PATTERN = Pattern.compile("^(?<date>\\d{8})\\s*戰績[:：]\\s*(?<pairs>.+)$", Pattern.DOTALL);
 	// 玩家之間可用半形逗號、全形逗號或頓號分隔
 	private static final Pattern PAIR_SEPARATOR = Pattern.compile("\\s*[,，、]\\s*");
 	private static final Pattern NAME_SCORE = Pattern.compile("^(?<name>\\S+)\\s+(?<score>[+-]?\\d+)$");
@@ -40,8 +43,10 @@ public class ScoreService {
 	 * @return
 	 */
 	public String addByFormattedLine(String text) {
+		// 記錄目前執行到哪一步，出錯時可得知資料庫寫到一半的狀況（libSQL driver 不支援 transaction）
+		String step = "解析";
 		try {
-			Matcher m = LINE_PATTERN.matcher(text.trim());
+			Matcher m = LINE_PATTERN.matcher(normalize(text));
 			if (!m.matches())
 				return "❌ 格式錯誤，請用：20251017 戰績：隨 -7700,蕭 -2100,馬 5700,堂 3700,鳥 400";
 			String date = m.group("date");
@@ -68,16 +73,20 @@ public class ScoreService {
 			if (scores.isEmpty())
 				return "❌ 未寫入任何分數";
 
+			step = "刪除當日舊資料";
 			deleteByDate(date);
 
+			step = "新增場次";
 			jdbc.update("INSERT INTO mahjong_rounds(round_date) VALUES (?)", date);
 			// 每個 statement 都是獨立的 HTTP 請求，last_insert_rowid() 不可靠，改用日期查回 id
+			step = "查詢場次 id";
 			Long roundId = jdbc.queryForObject("SELECT id FROM mahjong_rounds WHERE round_date=?", Long.class, date);
 
 			StringBuilder msg = new StringBuilder();
 			for (Map.Entry<String, Integer> e : scores.entrySet()) {
 				String p = e.getKey();
 				int s = e.getValue();
+				step = "新增 " + p + " 的分數";
 				jdbc.update("INSERT INTO mahjong_records(round_id,round_date,player,score) VALUES (?,?,?,?)",
 						roundId, date, p, s);
 				msg.append(String.format("%s %+d (%s)\n", p, s, s > 0 ? "1勝0敗" : s < 0 ? "0勝1敗" : "0勝0敗"));
@@ -85,10 +94,32 @@ public class ScoreService {
 			return "✅ 已登錄 " + formatDate(date) + " 戰績\n" + msg.toString().trim();
 
 		} catch (Exception ex) {
-			log.error("新增戰績失敗: " + text, ex);
-			return "哎啊~新增有問題";
+			log.error("新增戰績失敗（" + step + "）: " + text, ex);
+			return "哎啊~新增有問題\n步驟：" + step + "\n原因：" + errorMessage(ex)
+					+ (step.equals("解析") ? "" : "\n資料可能只寫入一半，請重新 /add 一次（會先清掉當日資料）");
 		}
 
+	}
+
+	/**
+	 * 統一輸入字元：全形空白、不換行空白、全形數字與正負號（手機輸入法常見）轉成半形
+	 */
+	private static String normalize(String text) {
+		return Normalizer.normalize(text, Normalizer.Form.NFKC)
+				.replace('−', '-') // 數學減號 −
+				.trim();
+	}
+
+	/**
+	 * 取出最底層例外的訊息，避免只顯示 Spring 包裝過的冗長 SQL 訊息
+	 */
+	private static String errorMessage(Throwable ex) {
+		Throwable cause = NestedExceptionUtils.getMostSpecificCause(ex);
+		String msg = cause.getMessage();
+		if (msg == null || msg.isBlank())
+			msg = cause.getClass().getSimpleName();
+		// LINE 訊息不宜過長
+		return msg.length() > 300 ? msg.substring(0, 300) + "…" : msg;
 	}
 
 	/**
@@ -105,7 +136,7 @@ public class ScoreService {
 			return r == 0 ? "ℹ️ 該日期無資料" : "🗑 已刪除 " + formatDate(date) + " 戰績";
 		} catch (Exception ex) {
 			log.error("刪除戰績失敗: " + date, ex);
-			return "哎啊~刪除有問題";
+			return "哎啊~刪除有問題\n原因：" + errorMessage(ex);
 		}
 	}
 
