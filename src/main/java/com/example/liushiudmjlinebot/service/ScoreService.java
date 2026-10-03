@@ -3,7 +3,9 @@ package com.example.liushiudmjlinebot.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.NestedExceptionUtils;
+import org.springframework.jdbc.core.ArgumentPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementCallback;
 import org.springframework.stereotype.Service;
 
 import java.text.Normalizer;
@@ -77,7 +79,7 @@ public class ScoreService {
 			deleteByDate(date);
 
 			step = "新增場次";
-			jdbc.update("INSERT INTO mahjong_rounds(round_date) VALUES (?)", date);
+			update("INSERT INTO mahjong_rounds(round_date) VALUES (?)", date);
 			// 每個 statement 都是獨立的 HTTP 請求，last_insert_rowid() 不可靠，改用日期查回 id
 			step = "查詢場次 id";
 			Long roundId = jdbc.queryForObject("SELECT id FROM mahjong_rounds WHERE round_date=?", Long.class, date);
@@ -87,7 +89,7 @@ public class ScoreService {
 				String p = e.getKey();
 				int s = e.getValue();
 				step = "新增 " + p + " 的分數";
-				jdbc.update("INSERT INTO mahjong_records(round_id,round_date,player,score) VALUES (?,?,?,?)",
+				update("INSERT INTO mahjong_records(round_id,round_date,player,score) VALUES (?,?,?,?)",
 						roundId, date, p, s);
 				msg.append(String.format("%s %+d (%s)\n", p, s, s > 0 ? "1勝0敗" : s < 0 ? "0勝1敗" : "0勝0敗"));
 			}
@@ -99,6 +101,18 @@ public class ScoreService {
 					+ (step.equals("解析") ? "" : "\n資料可能只寫入一半，請重新 /add 一次（會先清掉當日資料）");
 		}
 
+	}
+
+	/**
+	 * 取代 jdbc.update(sql, args)：libSQL driver 的 PreparedStatement 沒實作 executeUpdate()
+	 * （會丟 SQLFeatureNotSupportedException），只能改呼叫 executeLargeUpdate()
+	 */
+	private int update(String sql, Object... args) {
+		Long rows = jdbc.execute(sql, (PreparedStatementCallback<Long>) ps -> {
+			new ArgumentPreparedStatementSetter(args).setValues(ps);
+			return ps.executeLargeUpdate();
+		});
+		return rows == null ? 0 : rows.intValue();
 	}
 
 	/**
@@ -147,8 +161,8 @@ public class ScoreService {
 	 */
 	private int deleteByDate(String date) {
 		// 以 round_date 刪除明細，避免舊資料 round_id 不正確而刪不乾淨
-		int cnt = jdbc.update("DELETE FROM mahjong_records WHERE round_date=?", date);
-		cnt += jdbc.update("DELETE FROM mahjong_rounds WHERE round_date=?", date);
+		int cnt = update("DELETE FROM mahjong_records WHERE round_date=?", date);
+		cnt += update("DELETE FROM mahjong_rounds WHERE round_date=?", date);
 		return cnt;
 	}
 
